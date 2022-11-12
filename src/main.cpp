@@ -96,11 +96,8 @@ loop() {
 					Serial.println(F("Failed to send unlock command"));
 				}
 				last_operated = millis();
-				if (client.get_model() == Sesame::model_t::sesame_cycle) {
-					state = 3;
-				} else {
-					state = 2;
-				}
+				state = 2;
+				
 			} else {
 				if (client.get_state() == SesameClient::state_t::idle) {
 					Serial.println(F("Failed to authenticate"));
