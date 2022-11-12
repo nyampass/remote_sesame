@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <title>Sesame Remote Lock Test Server</title>
+</head>
+
+<body>
+    <p>Request Status</p>
+    <p>{{ message }}</p>
+    <form action="/admin" method="POST">
+        <label><input type="radio" name="state" value=0>lock</label>
+        <label><input type="radio" name="state" value=1>unlock</label>
+        <label><input type="radio" name="state" value=2>none</label>
+        <label><input type="submit" value="送信"></label>
+    </form>
+</body>
+
+</html>
