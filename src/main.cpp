@@ -14,10 +14,10 @@
 
 // 64 bytes public key of Sesame
 // 128 bytes hex str
-const char* sesame_pk = SESAME_PK;
+const char *sesame_pk = SESAME_PK;
 // 16 bytes secret key of Sesame
 // 32 bytes hex str
-const char* sesame_sec = SESAME_SECRET;
+const char *sesame_sec = SESAME_SECRET;
 
 using libsesame3bt::Sesame;
 using libsesame3bt::SesameClient;
@@ -30,35 +30,39 @@ SesameClient::state_t sesame_state;
 // Sesameのつまみの位置、電圧、施錠開錠状態が通知される
 // Sesameからの通知がある毎に呼び出される(変化がある場合のみ通知されている模様)
 // Sesameの設定変更があった場合も呼び出される(はずだが、今のところ動作していない)
-void
-status_update(SesameClient& client, SesameClient::Status status) {
-	if (status != last_status) {
+void status_update(SesameClient &client, SesameClient::Status status)
+{
+	if (status != last_status)
+	{
 		Serial.printf_P(PSTR("Setting lock=%d,unlock=%d\n"), status.lock_position(), status.unlock_position());
 		Serial.printf_P(PSTR("Status in_lock=%u,in_unlock=%u,pos=%d,volt=%.2f,volt_crit=%u\n"), status.in_lock(), status.in_unlock(),
-		                status.position(), status.voltage(), status.voltage_critical());
+						status.position(), status.voltage(), status.voltage_critical());
 		last_status = status;
 	}
 }
 
-void
-setup() {
+void setup()
+{
 	Serial.begin(115200);
 
 	// Bluetoothは初期化しておくこと
 	BLEDevice::init("");
 
 	// Bluetoothアドレスと機種コードを設定(sesame_3, sesame_4, sesame_cycle を指定可能)
-	if (!client.begin(BLEAddress{SESAME_ADDRESS, BLE_ADDR_RANDOM}, SESAME_MODEL)) {
+	if (!client.begin(BLEAddress{SESAME_ADDRESS, BLE_ADDR_RANDOM}, SESAME_MODEL))
+	{
 		Serial.println(F("Failed to begin"));
 		return;
 	}
 	// Sesameの鍵情報を設定
-	if (!client.set_keys(sesame_pk, sesame_sec)) {
+	if (!client.set_keys(sesame_pk, sesame_sec))
+	{
 		Serial.println(F("Failed to set keys"));
 		return;
 	}
 	// SesameClient状態コールバックを設定
-	client.set_state_callback([](auto& client, auto state) { sesame_state = state; });
+	client.set_state_callback([](auto &client, auto state)
+							  { sesame_state = state; });
 	// Sesame状態コールバックを設定
 	// (SESAME botは異なる呼び出しが必要。by_address_botを参照)
 	client.set_status_callback(status_update);
@@ -68,74 +72,87 @@ static uint32_t last_operated = 0;
 int state = 0;
 int count = 0;
 
-void
-loop() {
+void loop()
+{
 	// 接続開始、認証完了待ち、開錠、施錠を順次実行する
-	switch (state) {
-		case 0:
-			if (last_operated == 0 || millis() - last_operated > 3000) {
-				count++;
-				Serial.println(F("Connecting..."));
-				// connectはたまに失敗するようなので3回リトライする
-				if (!client.connect(3)) {
-					Serial.println(F("Failed to connect, abort"));
-					state = 4;
-					return;
-				}
-				Serial.println(F("connected"));
-				last_operated = millis();
-				state = 1;
+	switch (state)
+	{
+	case 0:
+		if (last_operated == 0 || millis() - last_operated > 3000)
+		{
+			count++;
+			Serial.println(F("Connecting..."));
+			// connectはたまに失敗するようなので3回リトライする
+			if (!client.connect(3))
+			{
+				Serial.println(F("Failed to connect, abort"));
+				state = 4;
+				return;
 			}
-			break;
-		case 1:
-			if (client.is_session_active()) {
-				Serial.println(F("Unlocking"));
-				// unloc(), lock()ともにコマンドの送信が成功した時点でtrueを返す
-				// 開錠、施錠されたかはstatusコールバックで確認する必要がある
-				if (!client.unlock(u8"開錠:テスト")) {
-					Serial.println(F("Failed to send unlock command"));
-				}
-				last_operated = millis();
-				state = 2;
-				
-			} else {
-				if (client.get_state() == SesameClient::state_t::idle) {
-					Serial.println(F("Failed to authenticate"));
-					state = 4;
-				}
+			Serial.println(F("connected"));
+			last_operated = millis();
+			state = 1;
+		}
+		break;
+	case 1:
+		if (client.is_session_active())
+		{
+			Serial.println(F("Unlocking"));
+			// unloc(), lock()ともにコマンドの送信が成功した時点でtrueを返す
+			// 開錠、施錠されたかはstatusコールバックで確認する必要がある
+			if (!client.unlock(u8"開錠:テスト"))
+			{
+				Serial.println(F("Failed to send unlock command"));
 			}
-			break;
-		case 2:
-			if (millis() - last_operated > 5000) {
-				Serial.println(F("Locking"));
-				if (!client.lock(u8"施錠:テスト")) {
-					Serial.println(F("Failed to send lock command"));
-				}
-				last_operated = millis();
-				state = 3;
+			last_operated = millis();
+			state = 2;
+		}
+		else
+		{
+			if (client.get_state() == SesameClient::state_t::idle)
+			{
+				Serial.println(F("Failed to authenticate"));
+				state = 4;
 			}
-			break;
-		case 3:
-			if (millis() - last_operated > 3000) {
-				client.disconnect();
-				Serial.println(F("Disconnected"));
-				last_operated = millis();
-				if (count > 0) {
-					state = 4;
-				} else {
-					state = 0;
-				}
+		}
+		break;
+	case 2:
+		if (millis() - last_operated > 5000)
+		{
+			Serial.println(F("Locking"));
+			if (!client.lock(u8"施錠:テスト"))
+			{
+				Serial.println(F("Failed to send lock command"));
 			}
-			break;
-		case 4:
-			// テストを兼ねてデストラクタを呼び出しているが、あえて明示的に呼び出す必要はない
-			client.~SesameClient();
-			Serial.println(F("All done"));
-			state = 9999;
-			break;
-		default:
-			// nothing todo
-			break;
+			last_operated = millis();
+			state = 3;
+		}
+		break;
+	case 3:
+		if (millis() - last_operated > 3000)
+		{
+			client.disconnect();
+			Serial.println(F("Disconnected"));
+			last_operated = millis();
+			if (count > 0)
+			{
+				state = 4;
+			}
+			else
+			{
+				state = 0;
+			}
+		}
+		break;
+	case 4:
+		// テストを兼ねてデストラクタを呼び出しているが、あえて明示的に呼び出す必要はない
+		client.~SesameClient();
+		Serial.println(F("All done"));
+		state = 9999;
+		break;
+	default:
+		// nothing todo
+		break;
 	}
 	delay(100);
 }
