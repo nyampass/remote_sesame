@@ -6,6 +6,7 @@
 #include <Sesame.h>
 #include <SesameClient.h>
 #include <SesameScanner.h>
+#include <WiFi.h>
 // Sesame鍵情報設定用インクルードファイル
 // 数行下で SESAME_SECRET 等を直接定義する場合は別ファイルを用意する必要はない
 #if __has_include("mysesame-config.h")
@@ -18,6 +19,10 @@ const char *sesame_pk = SESAME_PK;
 // 16 bytes secret key of Sesame
 // 32 bytes hex str
 const char *sesame_sec = SESAME_SECRET;
+
+const char *ssid = "nyampass-2g";
+const char *password = "laketown4f";
+const char *host = "192.168.3.38";
 
 using libsesame3bt::Sesame;
 using libsesame3bt::SesameClient;
@@ -44,6 +49,28 @@ void status_update(SesameClient &client, SesameClient::Status status)
 void setup()
 {
 	Serial.begin(115200);
+
+	delay(10);
+
+	// We start by connecting to a WiFi network
+
+	Serial.println();
+	Serial.println();
+	Serial.print("Connecting to ");
+	Serial.println(ssid);
+
+	WiFi.begin(ssid, password);
+
+	while (WiFi.status() != WL_CONNECTED)
+	{
+		delay(500);
+		Serial.print(".");
+	}
+
+	Serial.println("");
+	Serial.println("WiFi connected");
+	Serial.println("IP address: ");
+	Serial.println(WiFi.localIP());
 
 	// Bluetoothは初期化しておくこと
 	BLEDevice::init("");
@@ -72,6 +99,50 @@ static uint32_t last_operated = 0;
 int state = 0;
 int count = 0;
 
+WiFiClient wifiClient;
+const int httpPort = 8080;
+
+String fetchStatus()
+{
+
+	if (!wifiClient.connect(host, httpPort))
+	{
+		Serial.println("connection failed");
+		return "";
+	}
+
+	// This will send the request to the server
+	wifiClient.print(String("GET ") + "/get-status" + " HTTP/1.1\r\n" +
+					 "Host: " + host + "\r\n" +
+					 "Connection: close\r\n\r\n");
+	unsigned long timeout = millis();
+	while (wifiClient.available() == 0)
+	{
+		if (millis() - timeout > 5000)
+		{
+			Serial.println(">>> Client Timeout !");
+			wifiClient.stop();
+			return "";
+		}
+	}
+
+	// Read all the lines of the reply from server and print them to Serial
+	String line = "";
+	while (wifiClient.available())
+	{
+		line = wifiClient.readStringUntil('\r');
+		Serial.print(line);
+	}
+
+	String status = line;
+	Serial.println(status);
+
+	Serial.println();
+	Serial.println("closing connection");
+
+	return status;
+}
+
 void loop()
 {
 	// 接続開始、認証完了待ち、開錠、施錠を順次実行する
@@ -95,38 +166,50 @@ void loop()
 		}
 		break;
 	case 1:
-		if (client.is_session_active())
-		{
-			Serial.println(F("Unlocking"));
-			// unloc(), lock()ともにコマンドの送信が成功した時点でtrueを返す
-			// 開錠、施錠されたかはstatusコールバックで確認する必要がある
-			if (!client.unlock(u8"開錠:テスト"))
-			{
-				Serial.println(F("Failed to send unlock command"));
-			}
-			last_operated = millis();
-			state = 2;
-		}
-		else
-		{
-			if (client.get_state() == SesameClient::state_t::idle)
-			{
-				Serial.println(F("Failed to authenticate"));
-				state = 4;
-			}
-		}
-		break;
-	case 2:
 		if (millis() - last_operated > 5000)
 		{
-			Serial.println(F("Locking"));
-			if (!client.lock(u8"施錠:テスト"))
+			String serverStatus = fetchStatus();
+			serverStatus.trim();
+
+			if (client.is_session_active())
 			{
-				Serial.println(F("Failed to send lock command"));
+				// Serial.println(F("Unlocking"));
+				// unloc(), lock()ともにコマンドの送信が成功した時点でtrueを返す
+				// 開錠、施錠されたかはstatusコールバックで確認する必要がある
+				Serial.print("##" + serverStatus + "##");
+				if (serverStatus == "1")
+				{
+					if (!client.unlock(u8"開錠:テスト"))
+					{
+						Serial.println(F("Failed to send unlock command"));
+					}
+				}
+				if (serverStatus == "0")
+				{
+					Serial.println(F("Locking"));
+					if (!client.lock(u8"施錠:テスト"))
+					{
+						Serial.println(F("Failed to send lock command"));
+					}
+				}
+				if (serverStatus == "2")
+				{
+					Serial.println("none");
+					state = 3;
+				}
+				last_operated = millis();
+				// state = 2;
 			}
-			last_operated = millis();
-			state = 3;
+			else
+			{
+				if (client.get_state() == SesameClient::state_t::idle)
+				{
+					Serial.println(F("Failed to authenticate"));
+					state = 4;
+				}
+			}
 		}
+
 		break;
 	case 3:
 		if (millis() - last_operated > 3000)

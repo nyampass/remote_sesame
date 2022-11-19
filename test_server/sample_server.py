@@ -21,4 +21,4 @@ def get_status():
     return str(current_status)
 
 
-app.run(host='192.168.0.11', port=8000, debug=False)
+app.run(host='192.168.3.38', port=8080, debug=False)
