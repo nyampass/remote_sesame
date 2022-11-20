@@ -189,18 +189,16 @@ String fetchStatus()
 	}
 
 	// Read all the lines of the reply from server and print them to Serial
-	String line = "";
+	String status = "";
 	while (wifiClient.available())
 	{
-		line = wifiClient.readStringUntil('\r');
-		Serial.print(line);
+		status = wifiClient.readStringUntil('\r');
 	}
+	status.trim();
 
-	String status = line;
-	Serial.println(status);
-
-	Serial.println();
+	Serial.println("Server Status : " + status);
 	Serial.println("closing connection");
+	Serial.println();
 
 	return status;
 }
@@ -208,6 +206,7 @@ String fetchStatus()
 void loop()
 {
 	// 接続開始、認証完了待ち、開錠、施錠を順次実行する
+	String serverStatus = "1";
 	switch (state)
 	{
 	case 0:
@@ -228,17 +227,15 @@ void loop()
 		}
 		break;
 	case 1:
-		if (millis() - last_operated > 5000)
-		{
-			String serverStatus = fetchStatus();
-			serverStatus.trim();
+		serverStatus = fetchStatus();
+			Serial.print("######ChangeStatus######");
 
 			if (client.is_session_active())
 			{
 				// Serial.println(F("Unlocking"));
 				// unloc(), lock()ともにコマンドの送信が成功した時点でtrueを返す
 				// 開錠、施錠されたかはstatusコールバックで確認する必要がある
-				Serial.print("##" + serverStatus + "##");
+				Serial.println("##" + serverStatus + "##");
 				if (serverStatus == "1")
 				{
 					if (!client.unlock(u8"開錠:テスト"))
@@ -260,7 +257,6 @@ void loop()
 					state = 3;
 				}
 				last_operated = millis();
-				// state = 2;
 			}
 			else
 			{
@@ -270,7 +266,7 @@ void loop()
 					state = 4;
 				}
 			}
-		}
+		// }
 
 		break;
 	case 3:
