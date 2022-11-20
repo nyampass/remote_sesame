@@ -48,32 +48,37 @@ void status_update(SesameClient &client, SesameClient::Status status)
 	}
 }
 
-static const char*
-model_str(Sesame::model_t model) {
-	switch (model) {
-		case Sesame::model_t::sesame_3:
-			return "SESAME 3";
-		case Sesame::model_t::wifi_2:
-			return "Wi-Fi Module 2";
-		case Sesame::model_t::sesame_bot:
-			return "SESAME bot";
-		case Sesame::model_t::sesame_cycle:
-			return "SESAME Cycle";
-		case Sesame::model_t::sesame_4:
-			return "SESAME 4";
-		default:
-			return "UNKNOWN";
+static const char *
+model_str(Sesame::model_t model)
+{
+	switch (model)
+	{
+	case Sesame::model_t::sesame_3:
+		return "SESAME 3";
+	case Sesame::model_t::wifi_2:
+		return "Wi-Fi Module 2";
+	case Sesame::model_t::sesame_bot:
+		return "SESAME bot";
+	case Sesame::model_t::sesame_cycle:
+		return "SESAME Cycle";
+	case Sesame::model_t::sesame_4:
+		return "SESAME 4";
+	default:
+		return "UNKNOWN";
 	}
 }
 
 const SesameInfo
-*scan_and_init() {
+	*
+	scan_and_init()
+{
 	// SesameScannerはシングルトン
-	SesameScanner& scanner = SesameScanner::get();
+	SesameScanner &scanner = SesameScanner::get();
 
 	Serial.println(F("Scanning 10 seconds"));
 	const SesameInfo *result;
-	scanner.scan(10, [ &result](SesameScanner& _scanner, const SesameInfo* _info) {
+	scanner.scan(10, [&result](SesameScanner &_scanner, const SesameInfo *_info)
+				 {
 		if (_info) {  // nullptrの検査を実施
 			Serial.printf_P(PSTR("model=%s,addr=%s,UUID=%s,registered=%u\n"), model_str(_info->model), _info->address.toString().c_str(),
 			                _info->uuid.toString().c_str(), _info->flags.registered);
@@ -82,15 +87,17 @@ const SesameInfo
 				result = _info;
 				_scanner.stop(); // スキャンを停止させたくなったらstop()を呼び出す
 			}
-		}
-	});
-	if(result){
+		} });
+	if (result)
+	{
 		return result;
-	}else{
+	}
+	else
+	{
 		Serial.println(F("No usable Sesame found"));
 		return nullptr;
 	}
-	}
+}
 
 WiFiClient wifiClient;
 const int httpPort = HTTPPORT;
@@ -136,7 +143,7 @@ String serverStatus = "999";
 void setup()
 {
 	pinMode(10, OUTPUT);
-  	digitalWrite(10, HIGH);
+	digitalWrite(10, HIGH);
 
 	Serial.begin(115200);
 
@@ -166,7 +173,8 @@ void setup()
 	BLEDevice::init("");
 
 	auto info = scan_and_init();
-	if(info == nullptr){
+	if (info == nullptr)
+	{
 		Serial.println(F("Failed to begin"));
 		return;
 	}
@@ -220,9 +228,10 @@ void loop()
 		}
 		break;
 	case 1:
-  		digitalWrite(10, LOW);
+		digitalWrite(10, LOW);
 		_fetchStatu = fetchStatus();
-		if(serverStatus == _fetchStatu) break;
+		if (serverStatus == _fetchStatu)
+			break;
 		serverStatus = _fetchStatu;
 		Serial.println("######Status######");
 
