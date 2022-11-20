@@ -3,7 +3,7 @@ app = Flask(__name__, static_folder='.', static_url_path='')
 
 status = ['Lock', 'Unlock', 'None']
 global current_status
-current_status = 2
+current_status = 1
 
 @app.route('/admin', methods=['GET','POST'])
 def post():
