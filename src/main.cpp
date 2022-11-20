@@ -20,9 +20,9 @@ const char *sesame_pk = SESAME_PK;
 // 32 bytes hex str
 const char *sesame_sec = SESAME_SECRET;
 
-const char *ssid = "nyampass-2g";
-const char *password = "laketown4f";
-const char *host = "192.168.3.38";
+const char *ssid = SSID;
+const char *password = PASSWORD;
+const char *host = HOST;
 
 using libsesame3bt::Sesame;
 using libsesame3bt::SesameClient;
@@ -155,7 +155,7 @@ int state = 0;
 int count = 0;
 
 WiFiClient wifiClient;
-const int httpPort = 8080;
+const int httpPort = HTTPPORT;
 
 String fetchStatus()
 {
