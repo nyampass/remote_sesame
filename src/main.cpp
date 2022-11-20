@@ -90,8 +90,49 @@ const SesameInfo
 		Serial.println(F("No usable Sesame found"));
 		return nullptr;
 	}
-	}	
+	}
 
+WiFiClient wifiClient;
+const int httpPort = HTTPPORT;
+String fetchStatus()
+{
+	if (!wifiClient.connect(host, httpPort))
+	{
+		Serial.println("connection failed");
+		return "";
+	}
+
+	// This will send the request to the server
+	wifiClient.print(String("GET ") + "/get-status" + " HTTP/1.1\r\n" +
+					 "Host: " + host + "\r\n" +
+					 "Connection: close\r\n\r\n");
+	unsigned long timeout = millis();
+	while (wifiClient.available() == 0)
+	{
+		if (millis() - timeout > 5000)
+		{
+			Serial.println(">>> Client Timeout !");
+			wifiClient.stop();
+			return "";
+		}
+	}
+
+	// Read all the lines of the reply from server and print them to Serial
+	String status = "";
+	while (wifiClient.available())
+	{
+		status = wifiClient.readStringUntil('\r');
+	}
+	status.trim();
+
+	Serial.println("Server Status : " + status);
+	Serial.println("closing connection");
+	Serial.println();
+
+	return status;
+}
+
+String serverStatus = "999";
 void setup()
 {
 	pinMode(10, OUTPUT);
@@ -148,58 +189,17 @@ void setup()
 	// Sesame状態コールバックを設定
 	// (SESAME botは異なる呼び出しが必要。by_address_botを参照)
 	client.set_status_callback(status_update);
+	serverStatus = fetchStatus();
 }
 
 static uint32_t last_operated = 0;
 int state = 0;
 int count = 0;
 
-WiFiClient wifiClient;
-const int httpPort = HTTPPORT;
-
-String fetchStatus()
-{
-
-	if (!wifiClient.connect(host, httpPort))
-	{
-		Serial.println("connection failed");
-		return "";
-	}
-
-	// This will send the request to the server
-	wifiClient.print(String("GET ") + "/get-status" + " HTTP/1.1\r\n" +
-					 "Host: " + host + "\r\n" +
-					 "Connection: close\r\n\r\n");
-	unsigned long timeout = millis();
-	while (wifiClient.available() == 0)
-	{
-		if (millis() - timeout > 5000)
-		{
-			Serial.println(">>> Client Timeout !");
-			wifiClient.stop();
-			return "";
-		}
-	}
-
-	// Read all the lines of the reply from server and print them to Serial
-	String status = "";
-	while (wifiClient.available())
-	{
-		status = wifiClient.readStringUntil('\r');
-	}
-	status.trim();
-
-	Serial.println("Server Status : " + status);
-	Serial.println("closing connection");
-	Serial.println();
-
-	return status;
-}
-
 void loop()
 {
 	// 接続開始、認証完了待ち、開錠、施錠を順次実行する
-	String serverStatus = "1";
+	String _fetchStatu = "999";
 	switch (state)
 	{
 	case 0:
@@ -221,47 +221,47 @@ void loop()
 		break;
 	case 1:
   		digitalWrite(10, LOW);
-		serverStatus = fetchStatus();
-			Serial.println("######Status######");
+		_fetchStatu = fetchStatus();
+		if(serverStatus == _fetchStatu) break;
+		serverStatus = _fetchStatu;
+		Serial.println("######Status######");
 
-			if (client.is_session_active())
+		if (client.is_session_active())
+		{
+			// Serial.println(F("Unlocking"));
+			// unloc(), lock()ともにコマンドの送信が成功した時点でtrueを返す
+			// 開錠、施錠されたかはstatusコールバックで確認する必要がある
+			Serial.println("##" + serverStatus + "##");
+			if (serverStatus == "1")
 			{
-				// Serial.println(F("Unlocking"));
-				// unloc(), lock()ともにコマンドの送信が成功した時点でtrueを返す
-				// 開錠、施錠されたかはstatusコールバックで確認する必要がある
-				Serial.println("##" + serverStatus + "##");
-				if (serverStatus == "1")
+				if (!client.unlock(u8"開錠:テスト"))
 				{
-					if (!client.unlock(u8"開錠:テスト"))
-					{
-						Serial.println(F("Failed to send unlock command"));
-					}
-				}
-				if (serverStatus == "0")
-				{
-					Serial.println(F("Locking"));
-					if (!client.lock(u8"施錠:テスト"))
-					{
-						Serial.println(F("Failed to send lock command"));
-					}
-				}
-				if (serverStatus == "2")
-				{
-					Serial.println("none");
-					state = 3;
-				}
-				last_operated = millis();
-			}
-			else
-			{
-				if (client.get_state() == SesameClient::state_t::idle)
-				{
-					Serial.println(F("Failed to authenticate"));
-					state = 4;
+					Serial.println(F("Failed to send unlock command"));
 				}
 			}
-		// }
-
+			if (serverStatus == "0")
+			{
+				Serial.println(F("Locking"));
+				if (!client.lock(u8"施錠:テスト"))
+				{
+					Serial.println(F("Failed to send lock command"));
+				}
+			}
+			if (serverStatus == "2")
+			{
+				Serial.println("none");
+				state = 3;
+			}
+			last_operated = millis();
+		}
+		else
+		{
+			if (client.get_state() == SesameClient::state_t::idle)
+			{
+				Serial.println(F("Failed to authenticate"));
+				state = 4;
+			}
+		}
 		break;
 	case 3:
 		if (millis() - last_operated > 3000)
