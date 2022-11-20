@@ -66,44 +66,37 @@ model_str(Sesame::model_t model) {
 	}
 }
 
-std::vector<libsesame3bt::SesameInfo>::const_iterator
+const SesameInfo
 *scan_and_init() {
 	// SesameScannerはシングルトン
 	SesameScanner& scanner = SesameScanner::get();
 
 	Serial.println(F("Scanning 10 seconds"));
-	std::vector<SesameInfo> results;
-
-	// SesameScanner::scanはスキャン完了までブロックする
-	// コールバック関数には SesameScanner& と、スキャンによって得られた情報 SesameInfo* が渡される
-	// SesameInfo* の中身はコールバックを抜けると破壊されるので必要ならばコピーしておくこと
-	// スキャンが終了する際には SesameInfo* = nullptr で呼び出される
-	// コールバック中に _scanner.stop() を呼び出すと、そこでスキャンは終了する
-	// スキャン結果には WiFiモジュール2が含まれるが本ライブラリでは対応していない
-	// 非同期スキャンを実行する SesameScanner::scan_async()もある
-	scanner.scan(10, [&results](SesameScanner& _scanner, const SesameInfo* _info) {
+	const SesameInfo *result;
+	scanner.scan(10, [ &result](SesameScanner& _scanner, const SesameInfo* _info) {
 		if (_info) {  // nullptrの検査を実施
-			// 結果をコピーして results vector に格納する
 			Serial.printf_P(PSTR("model=%s,addr=%s,UUID=%s,registered=%u\n"), model_str(_info->model), _info->address.toString().c_str(),
 			                _info->uuid.toString().c_str(), _info->flags.registered);
-			results.push_back(*_info);
+			if(_info->uuid.toString() == UUID){
+				Serial.println(F("#################device found#################"));
+				result = _info;
+				_scanner.stop(); // スキャンを停止させたくなったらstop()を呼び出す
+			}
 		}
-		// _scanner.stop(); // スキャンを停止させたくなったらstop()を呼び出す
 	});
-	Serial.printf_P(PSTR("%u devices found\n"), results.size());
- static auto found =
-	    std::find_if(results.cbegin(), results.cend(), [](auto& it) { return it.uuid.toString() == UUID; });
-	if (found != results.cend()) {
-		Serial.printf_P(PSTR("Using %s (%s)\n"), found->uuid.toString().c_str(), model_str(found->model));
-		return &found;
-	} else {
+	if(result){
+		return result;
+	}else{
 		Serial.println(F("No usable Sesame found"));
 		return nullptr;
 	}
-}
+	}	
 
 void setup()
 {
+	pinMode(10, OUTPUT);
+  	digitalWrite(10, HIGH);
+
 	Serial.begin(115200);
 
 	delay(10);
@@ -138,7 +131,7 @@ void setup()
 	}
 
 	// Bluetoothアドレスと機種コードを設定(sesame_3, sesame_4, sesame_cycle を指定可能)
-	if (!client.begin((*info)->address, (*info)->model))
+	if (!client.begin(info->address, info->model))
 	{
 		Serial.println(F("Failed to begin"));
 		return;
@@ -227,8 +220,9 @@ void loop()
 		}
 		break;
 	case 1:
+  		digitalWrite(10, LOW);
 		serverStatus = fetchStatus();
-			Serial.print("######ChangeStatus######");
+			Serial.println("######Status######");
 
 			if (client.is_session_active())
 			{
@@ -289,6 +283,7 @@ void loop()
 		// テストを兼ねてデストラクタを呼び出しているが、あえて明示的に呼び出す必要はない
 		client.~SesameClient();
 		Serial.println(F("All done"));
+		digitalWrite(10, HIGH);
 		state = 9999;
 		break;
 	default:
