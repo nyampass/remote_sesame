@@ -7,6 +7,7 @@
 #include <SesameClient.h>
 #include <SesameScanner.h>
 #include <WiFi.h>
+#include <HTTPClient.h>
 // Sesame鍵情報設定用インクルードファイル
 // 数行下で SESAME_SECRET 等を直接定義する場合は別ファイルを用意する必要はない
 #if __has_include("mysesame-config.h")
@@ -22,7 +23,7 @@ const char *sesame_sec = SESAME_SECRET;
 
 const char *ssid = SSID;
 const char *password = PASSWORD;
-const char *host = HOST;
+const char *url = URL;
 
 using libsesame3bt::Sesame;
 using libsesame3bt::SesameClient;
@@ -99,44 +100,22 @@ const SesameInfo
 	}
 }
 
-WiFiClient wifiClient;
-const int httpPort = HTTPPORT;
+HTTPClient http;
 String fetchStatus()
 {
-	if (!wifiClient.connect(host, httpPort))
+	http.begin(url);
+	http.setTimeout(5000);
+	int httpCode = http.GET();
+	if (httpCode < 0)
 	{
 		Serial.println("connection failed");
 		return "";
 	}
 
-	// This will send the request to the server
-	wifiClient.print(String("GET ") + "/get-status" + " HTTP/1.1\r\n" +
-					 "Host: " + host + "\r\n" +
-					 "Connection: close\r\n\r\n");
-	unsigned long timeout = millis();
-	while (wifiClient.available() == 0)
-	{
-		if (millis() - timeout > 5000)
-		{
-			Serial.println(">>> Client Timeout !");
-			wifiClient.stop();
-			return "";
-		}
-	}
+	String payload = http.getString();
+	Serial.println("Response: " + payload);
 
-	// Read all the lines of the reply from server and print them to Serial
-	String status = "";
-	while (wifiClient.available())
-	{
-		status = wifiClient.readStringUntil('\r');
-	}
-	status.trim();
-
-	Serial.println("Server Status : " + status);
-	Serial.println("closing connection");
-	Serial.println();
-
-	return status;
+	return payload;
 }
 
 String serverStatus = "999";
