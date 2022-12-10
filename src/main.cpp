@@ -143,19 +143,20 @@ String fetchStatus()
 			String line = webClient.readStringUntil('\n');
 			if (line == "\r")
 			{
-				Serial.println("headers received");
 				break;
 			}
 		}
 		// if there are incoming bytes available
 		// from the server, read them and print them:
+		String res = "";
 		while (webClient.available())
 		{
 			char c = webClient.read();
+			res += c;
 			Serial.write(c);
 		}
-
 		webClient.stop();
+		return res;
 	}
 	return "";
 }
