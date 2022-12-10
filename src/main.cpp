@@ -7,11 +7,14 @@
 #include <SesameClient.h>
 #include <SesameScanner.h>
 #include <WiFi.h>
-// Sesame鍵情報設定用インクルードファイル
-// 数行下で SESAME_SECRET 等を直接定義する場合は別ファイルを用意する必要はない
-#if __has_include("mysesame-config.h")
-#include "mysesame-config.h"
+#include <WiFiClientSecure.h>
+
+// 設定用インクルードファイル
+#if __has_include("config.h")
+#include "config.h"
 #endif
+
+#define HTTPS_PORT 443
 
 // 64 bytes public key of Sesame
 // 128 bytes hex str
@@ -20,9 +23,12 @@ const char *sesame_pk = SESAME_PK;
 // 32 bytes hex str
 const char *sesame_sec = SESAME_SECRET;
 
-const char *ssid = SSID;
-const char *password = PASSWORD;
-const char *host = HOST;
+const char *ssid = WIFI_SSID;
+const char *password = WIFI_PASSWORD;
+
+const char *api_server = API_SERVER;
+const char *api_path = API_PATH;
+const char *api_key = API_KEY;
 
 using libsesame3bt::Sesame;
 using libsesame3bt::SesameClient;
@@ -32,6 +38,12 @@ using libsesame3bt::SesameScanner;
 SesameClient client{};
 SesameClient::Status last_status{};
 SesameClient::state_t sesame_state;
+
+#if API_PORT == HTTPS_PORT
+WiFiClientSecure webClient;
+#else
+WiFiClient webClient;
+#endif // API_PORT == HTTPS_PORT
 
 // Sesameの状態通知コールバック
 // Sesameのつまみの位置、電圧、施錠開錠状態が通知される
@@ -99,44 +111,54 @@ const SesameInfo
 	}
 }
 
-WiFiClient wifiClient;
-const int httpPort = HTTPPORT;
 String fetchStatus()
 {
-	if (!wifiClient.connect(host, httpPort))
-	{
-		Serial.println("connection failed");
-		return "";
-	}
+	Serial.println("\nStarting connection to server...");
+#if API_PORT == HTTPS_PORT
+	Serial.println("https mode");
+	webClient.setInsecure(); // skip verification
+#else
+	Serial.println("http mode");
+#endif // API_PORT == HTTPS_PORT
 
-	// This will send the request to the server
-	wifiClient.print(String("GET ") + "/get-status" + " HTTP/1.1\r\n" +
-					 "Host: " + host + "\r\n" +
-					 "Connection: close\r\n\r\n");
-	unsigned long timeout = millis();
-	while (wifiClient.available() == 0)
+	Serial.print("!");
+	Serial.print(api_server);
+	Serial.println("!");
+	if (!webClient.connect(api_server, API_PORT))
+		Serial.println("Connection failed!");
+	else
 	{
-		if (millis() - timeout > 5000)
+		Serial.println("Connected to server!");
+		// Make a HTTP request:
+		webClient.print("GET https://");
+		webClient.print(api_server);
+		webClient.print(api_path);
+		webClient.println(" HTTP/1.0");
+		webClient.println("Host: www.howsmyssl.com");
+		webClient.println("Connection: close");
+		webClient.println();
+
+		while (webClient.connected())
 		{
-			Serial.println(">>> Client Timeout !");
-			wifiClient.stop();
-			return "";
+			String line = webClient.readStringUntil('\n');
+			if (line == "\r")
+			{
+				break;
+			}
 		}
+		// if there are incoming bytes available
+		// from the server, read them and print them:
+		String res = "";
+		while (webClient.available())
+		{
+			char c = webClient.read();
+			res += c;
+			Serial.write(c);
+		}
+		webClient.stop();
+		return res;
 	}
-
-	// Read all the lines of the reply from server and print them to Serial
-	String status = "";
-	while (wifiClient.available())
-	{
-		status = wifiClient.readStringUntil('\r');
-	}
-	status.trim();
-
-	Serial.println("Server Status : " + status);
-	Serial.println("closing connection");
-	Serial.println();
-
-	return status;
+	return "";
 }
 
 String serverStatus = "999";

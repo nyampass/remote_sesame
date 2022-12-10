@@ -5,7 +5,8 @@ status = ['Lock', 'Unlock', 'None']
 global current_status
 current_status = 1
 
-@app.route('/admin', methods=['GET','POST'])
+
+@app.route('/admin', methods=['GET', 'POST'])
 def post():
     global current_status
     if request.method == 'POST':
@@ -13,7 +14,8 @@ def post():
         if state_no == None:
             state_no = 2
         current_status = state_no
-    return render_template('admin.html', message = 'Current Request Status: ' + status[int(current_status)])
+    return render_template('admin.html', message='Current Request Status: ' + status[int(current_status)])
+
 
 @app.route('/get-status', methods=['GET'])
 def get_status():
@@ -21,4 +23,4 @@ def get_status():
     return str(current_status)
 
 
-app.run(host='192.168.3.38', port=8080, debug=False)
+app.run(host='0.0.0.0', port=8080, debug=False)
