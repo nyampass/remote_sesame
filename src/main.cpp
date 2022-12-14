@@ -26,9 +26,9 @@ const char *sesame_sec = SESAME_SECRET;
 const char *ssid = WIFI_SSID;
 const char *password = WIFI_PASSWORD;
 
-const char *api_server = API_SERVER;
-const char *api_path = API_PATH;
-const char *api_key = API_KEY;
+const char *apiServer = API_SERVER;
+const char *apiPath = API_PATH;
+const char *apiKey = API_KEY;
 
 using libsesame3bt::Sesame;
 using libsesame3bt::SesameClient;
@@ -36,8 +36,11 @@ using libsesame3bt::SesameInfo;
 using libsesame3bt::SesameScanner;
 
 SesameClient client{};
-SesameClient::Status last_status{};
 SesameClient::state_t sesame_state;
+
+SesameClient::Status lastStatus{};
+String lastStatusStr = "";
+bool updateStatus = false;
 
 enum Status
 {
@@ -48,18 +51,110 @@ enum Status
 	Status_fetchFailed,
 };
 
+void sendStatus(String status)
+{
+#if API_PORT == HTTPS_PORT
+	WiFiClientSecure client;
+	webClient.setInsecure(); // skip verification
+#else
+	WiFiClient client;
+#endif // API_PORT == HTTPS_PORT
+
+	if (!client.connect(apiServer, API_PORT))
+	{
+		return;
+	}
+
+	String body = "status=" + status;
+	client.println(String("POST https://") + apiServer + apiPath + " HTTP/1.0\r\n" +
+				   "Host: " + apiServer + "\r\n" +
+				   "Content-Type: application/x-www-form-urlencoded\r\n" +
+				   "Content-Length:" + String(body.length()) + "\r\n" +
+				   "Connection: close\r\n\r\n" +
+				   body);
+
+	unsigned long timeout = millis();
+	while (client.available() == 0)
+	{
+		if (millis() - timeout > 5000)
+		{
+			Serial.println(">>> Client Timeout !");
+			client.stop();
+			return;
+		}
+	}
+}
+
+Status fetchStatus()
+{
+#if API_PORT == HTTPS_PORT
+	WiFiClientSecure client;
+	webClient.setInsecure(); // skip verification
+#else
+	WiFiClient client;
+#endif // API_PORT == HTTPS_PORT
+
+	if (!client.connect(apiServer, API_PORT))
+	{
+		Serial.println("Connection failed!");
+		return Status_fetchFailed;
+	}
+
+	client.println(String("GET https://") + apiServer + apiPath + " HTTP/1.0\r\n" +
+				   "Host: " + apiServer + "\r\n" +
+				   "Connection: close\r\n");
+
+	unsigned long timeout = millis();
+	while (client.available() == 0)
+	{
+		if (millis() - timeout > 5000)
+		{
+			client.stop();
+			return Status_fetchFailed;
+		}
+	}
+
+	while (client.available())
+	{
+		String line = client.readStringUntil('\n');
+		if (line == "\r")
+		{
+			String res = client.readStringUntil('\n');
+			client.stop();
+
+			if (res == "lock")
+			{
+				return Status_requestLock;
+			}
+			else if (res == "unlock")
+			{
+				return Status_requestUnlock;
+			}
+			else if (res == "status")
+			{
+				return Status_requestStatus;
+			}
+
+			return Status_none;
+		}
+	}
+
+	return Status_none;
+}
+
 // Sesameの状態通知コールバック
 // Sesameのつまみの位置、電圧、施錠開錠状態が通知される
 // Sesameからの通知がある毎に呼び出される(変化がある場合のみ通知されている模様)
 // Sesameの設定変更があった場合も呼び出される(はずだが、今のところ動作していない)
 void status_update(SesameClient &client, SesameClient::Status status)
 {
-	if (status != last_status)
+	if (status != lastStatus || updateStatus)
 	{
-		Serial.printf_P(PSTR("Setting lock=%d,unlock=%d\n"), status.lock_position(), status.unlock_position());
 		Serial.printf_P(PSTR("Status in_lock=%u,in_unlock=%u,pos=%d,volt=%.2f,volt_crit=%u\n"), status.in_lock(), status.in_unlock(),
 						status.position(), status.voltage(), status.voltage_critical());
-		last_status = status;
+		lastStatus = status;
+		updateStatus = false;
+		lastStatusStr = String("lock=") + status.in_lock() + ",in_unlock=" + status.in_unlock() + ",pos=" + status.position() + ",volt=" + status.voltage() + ",volt_crit=" + status.voltage_critical();
 	}
 }
 
@@ -112,64 +207,6 @@ const SesameInfo
 		Serial.println(F("No usable Sesame found"));
 		return nullptr;
 	}
-}
-
-Status fetchStatus()
-{
-#if API_PORT == HTTPS_PORT
-	WiFiClientSecure client;
-	webClient.setInsecure(); // skip verification
-#else
-	WiFiClient client;
-#endif // API_PORT == HTTPS_PORT
-
-	if (!client.connect(api_server, API_PORT))
-	{
-		Serial.println("Connection failed!");
-		return Status_fetchFailed;
-	}
-
-	client.println(String("GET https://") + api_server + api_path + " HTTP/1.0\r\n" +
-				   "Host: " + api_server + "\r\n" +
-				   "Connection: close\r\n");
-
-	unsigned long timeout = millis();
-	while (client.available() == 0)
-	{
-		if (millis() - timeout > 5000)
-		{
-			client.stop();
-			return Status_fetchFailed;
-		}
-	}
-
-	while (client.available())
-	{
-		String line = client.readStringUntil('\n');
-		if (line == "\r")
-		{
-			String res = client.readStringUntil('\n');
-			client.stop();
-
-			// M5.Lcd.printf(res.c_str());
-			if (res == "lock")
-			{
-				return Status_requestLock;
-			}
-			else if (res == "unlock")
-			{
-				return Status_requestUnlock;
-			}
-			else if (res == "status")
-			{
-				return Status_requestStatus;
-			}
-
-			return Status_none;
-		}
-	}
-
-	return Status_none;
 }
 
 void setup()
@@ -235,7 +272,8 @@ void setup()
 	// (SESAME botは異なる呼び出しが必要。by_address_botを参照)
 	client.set_status_callback(status_update);
 
-	M5.Lcd.println("clear!");
+	M5.Lcd.println("ok!");
+	// esp_restart();
 }
 
 static uint32_t last_operated = 0;
@@ -243,8 +281,11 @@ int count = 0;
 
 void loop()
 {
-	// M5.Lcd.fillScreen(BLACK);
-	// M5.Lcd.setCursor(0, 0);
+	if (lastStatusStr != "")
+	{
+		sendStatus(lastStatusStr);
+		lastStatusStr = "";
+	}
 
 	Status status = fetchStatus();
 	M5.Lcd.print(status);
@@ -255,10 +296,12 @@ void loop()
 		{
 			M5.Lcd.print("F");
 		}
-		while (!client.is_session_active())
+		int count = 0;
+		while (!client.is_session_active() && count < 3)
 		{
 			M5.Lcd.print(".");
-			delay(500);
+			delay(800);
+			count++;
 		}
 		switch (status)
 		{
@@ -269,104 +312,11 @@ void loop()
 			client.unlock(u8"開錠:テスト");
 			break;
 		case Status_requestStatus:
-			// Serial.println((uint8_t)client.get_state());
-			M5.Lcd.print("->");
+			updateStatus = true;
 			M5.Lcd.print((uint8_t)client.get_state());
 			break;
 		}
 		client.disconnect();
 	}
-
-	// switch (state)
-	// {
-	// case 0:
-	// 	if (last_operated == 0 || millis() - last_operated > 3000)
-	// 	{
-	// 		count++;
-	// 		Serial.println(F("Connecting..."));
-	// 		// connectはたまに失敗するようなので3回リトライする
-	// 		if (!client.connect(3))
-	// 		{
-	// 			Serial.println(F("Failed to connect, abort"));
-	// 			state = 4;
-	// 			return;
-	// 		}
-	// 		Serial.println(F("connected"));
-	// 		last_operated = millis();
-	// 		state = 1;
-	// 	}
-	// 	break;
-	// case 1:
-	// 	digitalWrite(10, LOW);
-	// 	_fetchStatu = fetchStatus();
-	// 	if (serverStatus == _fetchStatu)
-	// 		break;
-	// 	serverStatus = _fetchStatu;
-	// 	Serial.println("######Status######");
-
-	// 	if (client.is_session_active())
-	// 	{
-	// 		// Serial.println(F("Unlocking"));
-	// 		// unloc(), lock()ともにコマンドの送信が成功した時点でtrueを返す
-	// 		// 開錠、施錠されたかはstatusコールバックで確認する必要がある
-	// 		Serial.println("##" + serverStatus + "##");
-	// 		if (serverStatus == "1")
-	// 		{
-	// 			if (!client.unlock(u8"開錠:テスト"))
-	// 			{
-	// 				Serial.println(F("Failed to send unlock command"));
-	// 			}
-	// 		}
-	// 		if (serverStatus == "0")
-	// 		{
-	// 			Serial.println(F("Locking"));
-	// 			if (!client.lock(u8"施錠:テスト"))
-	// 			{
-	// 				Serial.println(F("Failed to send lock command"));
-	// 			}
-	// 		}
-	// 		if (serverStatus == "2")
-	// 		{
-	// 			Serial.println("none");
-	// 			state = 3;
-	// 		}
-	// 		last_operated = millis();
-	// 	}
-	// 	else
-	// 	{
-	// 		if (client.get_state() == SesameClient::state_t::idle)
-	// 		{
-	// 			Serial.println(F("Failed to authenticate"));
-	// 			state = 4;
-	// 		}
-	// 	}
-	// 	break;
-	// case 3:
-	// 	if (millis() - last_operated > 3000)
-	// 	{
-	// 		client.disconnect();
-	// 		Serial.println(F("Disconnected"));
-	// 		last_operated = millis();
-	// 		if (count > 0)
-	// 		{
-	// 			state = 4;
-	// 		}
-	// 		else
-	// 		{
-	// 			state = 0;
-	// 		}
-	// 	}
-	// 	break;
-	// case 4:
-	// 	// テストを兼ねてデストラクタを呼び出しているが、あえて明示的に呼び出す必要はない
-	// 	client.~SesameClient();
-	// 	Serial.println(F("All done"));
-	// 	digitalWrite(10, HIGH);
-	// 	state = 9999;
-	// 	break;
-	// default:
-	// 	// nothing todo
-	// 	break;
-	// }
 	delay(5000);
 }
