@@ -55,7 +55,7 @@ void sendStatus(String status)
 {
 #if API_PORT == HTTPS_PORT
 	WiFiClientSecure client;
-	webClient.setInsecure(); // skip verification
+	client.setInsecure(); // skip verification
 #else
 	WiFiClient client;
 #endif // API_PORT == HTTPS_PORT
@@ -90,7 +90,7 @@ Status fetchStatus()
 {
 #if API_PORT == HTTPS_PORT
 	WiFiClientSecure client;
-	webClient.setInsecure(); // skip verification
+	client.setInsecure(); // skip verification
 #else
 	WiFiClient client;
 #endif // API_PORT == HTTPS_PORT
