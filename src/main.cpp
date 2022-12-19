@@ -70,6 +70,7 @@ void sendStatus(String status)
 				   "Host: " + apiServer + "\r\n" +
 				   "Content-Type: application/x-www-form-urlencoded\r\n" +
 				   "Content-Length:" + String(body.length()) + "\r\n" +
+				   "X-API-Key: " + apiKey + "\r\n" +
 				   "Connection: close\r\n\r\n" +
 				   body);
 
@@ -102,6 +103,7 @@ Status fetchStatus()
 
 	client.println(String("GET https://") + apiServer + apiPath + " HTTP/1.0\r\n" +
 				   "Host: " + apiServer + "\r\n" +
+				   "X-API-Key: " + apiKey + "\r\n" +
 				   "Connection: close\r\n");
 
 	unsigned long timeout = millis();
