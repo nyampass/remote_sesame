@@ -175,6 +175,8 @@ model_str(Sesame::model_t model)
 		return "SESAME Cycle";
 	case Sesame::model_t::sesame_4:
 		return "SESAME 4";
+	case Sesame::model_t::sesame_5:
+		return "SESAME 5";
 	default:
 		return "UNKNOWN";
 	}
